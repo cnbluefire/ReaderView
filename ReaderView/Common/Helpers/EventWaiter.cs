@@ -27,7 +27,7 @@ namespace ReaderView.Common.Helpers
 
         public TimeSpan Interval { get; set; }
 
-        public bool IsWaiting
+        public bool IsEnabled
         {
             get
             {

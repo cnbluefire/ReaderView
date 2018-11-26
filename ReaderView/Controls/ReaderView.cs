@@ -48,10 +48,10 @@ namespace ReaderView.Controls
             this.SizeChanged += ReaderView_SizeChanged;
 
 
-            IndexFliter = new EventWaiter();
-            CreateContentWaiter = new EventDelayer();
-            CreateContentWaiter.ResetWhenDelayed = true;
-            CreateContentWaiter.Arrived += CreateContentWaiter_Arrived;
+            IndexWaiter = new EventWaiter();
+            CreateContentDelayer = new EventDelayer();
+            CreateContentDelayer.ResetWhenDelayed = true;
+            CreateContentDelayer.Arrived += CreateContentWaiter_Arrived;
 
             this.Unloaded += (s, a) =>
             {
@@ -72,8 +72,8 @@ namespace ReaderView.Controls
         double startX = 0;
         bool IsCoreSelectedChanged;
         bool IsAnimating;
-        EventWaiter IndexFliter;
-        EventDelayer CreateContentWaiter;
+        EventWaiter IndexWaiter;
+        EventDelayer CreateContentDelayer;
 
         Compositor compositor;
         Vector3KeyFrameAnimation OffsetAnimation;
@@ -301,7 +301,7 @@ namespace ReaderView.Controls
                 {
                     if (s is ReaderView sender)
                     {
-                        sender.CreateContentWaiter.Delay();
+                        sender.CreateContentDelayer.Delay();
                     }
                 }
             }));
@@ -339,7 +339,7 @@ namespace ReaderView.Controls
 
         private void ReaderView_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            CreateContentWaiter.Delay();
+            CreateContentDelayer.Delay();
         }
 
         private void CreateContentWaiter_Arrived(object sender, EventArgs e)
@@ -392,7 +392,7 @@ namespace ReaderView.Controls
 
         private void _PointerWheelChanged(object sender, PointerRoutedEventArgs e)
         {
-            if (IndexFliter.IsWaiting)
+            if (IndexWaiter.IsEnabled)
             {
                 IsCoreSelectedChanged = true;
                 if (e.GetCurrentPoint(this).Properties.MouseWheelDelta > 0)
@@ -412,24 +412,27 @@ namespace ReaderView.Controls
 
         private void _PointerPressed(object sender, PointerRoutedEventArgs e)
         {
-            if (m_source != null)
+            if (IndexWaiter.IsEnabled)
             {
-                var pointer = e.GetCurrentPoint(this);
-                if (pointer.PointerDevice.PointerDeviceType == Windows.Devices.Input.PointerDeviceType.Pen || pointer.PointerDevice.PointerDeviceType == Windows.Devices.Input.PointerDeviceType.Touch)
+                if (m_source != null)
                 {
-                    try
+                    var pointer = e.GetCurrentPoint(this);
+                    if (pointer.PointerDevice.PointerDeviceType == Windows.Devices.Input.PointerDeviceType.Pen || pointer.PointerDevice.PointerDeviceType == Windows.Devices.Input.PointerDeviceType.Touch)
                     {
-                        m_source.TryRedirectForManipulation(pointer);
+                        try
+                        {
+                            m_source.TryRedirectForManipulation(pointer);
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine(ex);
+                        }
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        System.Diagnostics.Debug.WriteLine(ex);
+                        this.CapturePointer(e.Pointer);
+                        _GestureRecognizer.ProcessDownEvent(pointer);
                     }
-                }
-                else
-                {
-                    this.CapturePointer(e.Pointer);
-                    _GestureRecognizer.ProcessDownEvent(pointer);
                 }
             }
         }
