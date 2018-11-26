@@ -6,6 +6,8 @@ using System.Numerics;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using Windows.UI.Composition;
+using Windows.UI.Composition.Interactions;
+using Windows.UI.Input;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Data;
@@ -18,15 +20,31 @@ using Windows.UI.Xaml.Media;
 
 namespace ReaderView.Controls
 {
-    public sealed class ReaderView : Control
+    public sealed class ReaderView : Control, IInteractionTrackerOwner
     {
         public ReaderView()
         {
             this.DefaultStyleKey = typeof(ReaderView);
 
+            _GestureRecognizer = new GestureRecognizer();
+            _GestureRecognizer.GestureSettings = GestureSettings.ManipulationTranslateX;
+            _GestureRecognizer.ManipulationStarted += _GestureRecognizer_ManipulationStarted;
+            _GestureRecognizer.ManipulationUpdated += _GestureRecognizer_ManipulationUpdated;
+            _GestureRecognizer.ManipulationCompleted += _GestureRecognizer_ManipulationCompleted;
+
             PointerWheelChangedEventHandler = new PointerEventHandler(_PointerWheelChanged);
+            PointerPressedEventHandler = new PointerEventHandler(_PointerPressed);
+            PointerMovedEventHandler = new PointerEventHandler(_PointerMoved);
+            PointerReleasedEventHandler = new PointerEventHandler(_PointerReleased);
+            PointerCanceledEventHandler = new PointerEventHandler(_PointerCanceled);
+
             this.AddHandler(UIElement.PointerWheelChangedEvent, PointerWheelChangedEventHandler, true);
+            this.AddHandler(UIElement.PointerPressedEvent, PointerPressedEventHandler, true);
+            this.AddHandler(UIElement.PointerMovedEvent, PointerMovedEventHandler, true);
+            this.AddHandler(UIElement.PointerReleasedEvent, PointerReleasedEventHandler, true);
+            this.AddHandler(UIElement.PointerCanceledEvent, PointerCanceledEventHandler, true);
             this.SizeChanged += ReaderView_SizeChanged;
+
 
             IndexFliter = new EventTimeFliter();
             CreateContentWaiter = new EventWaiter();
@@ -36,22 +54,38 @@ namespace ReaderView.Controls
             this.Unloaded += (s, a) =>
             {
                 this.RemoveHandler(UIElement.PointerWheelChangedEvent, PointerWheelChangedEventHandler);
+                this.RemoveHandler(UIElement.PointerPressedEvent, PointerPressedEventHandler);
+                this.RemoveHandler(UIElement.PointerMovedEvent, PointerMovedEventHandler);
+                this.RemoveHandler(UIElement.PointerReleasedEvent, PointerReleasedEventHandler);
+                this.RemoveHandler(UIElement.PointerCanceledEvent, PointerCanceledEventHandler);
 
             };
 
         }
 
+
         string content;
         double startX = 0;
         bool IsCoreSelectedChanged;
+        bool IsAnimating;
         EventTimeFliter IndexFliter;
         EventWaiter CreateContentWaiter;
 
         Compositor compositor;
         Vector3KeyFrameAnimation OffsetAnimation;
         Visual PanelVisual;
+        Visual ReaderViewVisual;
+
+        InteractionTracker m_tracker;
+        VisualInteractionSource m_source;
+        ExpressionAnimation OffsetBind;
 
         PointerEventHandler PointerWheelChangedEventHandler;
+        PointerEventHandler PointerPressedEventHandler;
+        PointerEventHandler PointerMovedEventHandler;
+        PointerEventHandler PointerReleasedEventHandler;
+        PointerEventHandler PointerCanceledEventHandler;
+        GestureRecognizer _GestureRecognizer;
 
         StackPanel ContentPanel;
         Border ContentBorder;
@@ -64,45 +98,8 @@ namespace ReaderView.Controls
             ContentBorder = GetTemplateChild(nameof(ContentBorder)) as Border;
 
             SetupComposition();
+            SetupTracker();
         }
-
-        protected override void OnManipulationStarted(ManipulationStartedRoutedEventArgs e)
-        {
-            if (IndexFliter.IsEnable)
-            {
-                PanelVisual.StopAnimation("Offset");
-                startX = -Index * this.ActualWidth;
-            }
-            base.OnManipulationStarted(e);
-        }
-
-        protected override void OnManipulationDelta(ManipulationDeltaRoutedEventArgs e)
-        {
-            if (Math.Abs(e.Cumulative.Translation.X) < this.ActualWidth)
-            {
-                PanelVisual.Offset = new Vector3((float)(startX + e.Cumulative.Translation.X), 0f, 0f);
-            }
-
-            base.OnManipulationDelta(e);
-        }
-
-        protected override void OnManipulationCompleted(ManipulationCompletedRoutedEventArgs e)
-        {
-            IsCoreSelectedChanged = true;
-            if (e.Cumulative.Translation.X > 150 || e.Velocities.Linear.X > 0.5)
-            {
-                Index--;
-                if (Index < 0) Index = 0;
-            }
-            else if (e.Cumulative.Translation.X < -150 || e.Velocities.Linear.X < -0.5)
-            {
-                Index++;
-                if (Index > Count - 1) Index = Count - 1;
-            }
-            GotoIndex(Index);
-            IsCoreSelectedChanged = false;
-        }
-
 
         public void SetContent(string Content, SetContentMode mode = SetContentMode.First)
         {
@@ -135,18 +132,54 @@ namespace ReaderView.Controls
             OffsetAnimation.StopBehavior = AnimationStopBehavior.LeaveCurrentValue;
 
             PanelVisual = ElementCompositionPreview.GetElementVisual(ContentPanel);
+            ReaderViewVisual = ElementCompositionPreview.GetElementVisual(this);
+        }
+
+        private void SetupTracker()
+        {
+            m_tracker = InteractionTracker.CreateWithOwner(compositor, this);
+            InitTrackerPositions();
+
+            m_source = VisualInteractionSource.Create(ReaderViewVisual);
+            m_source.ManipulationRedirectionMode = VisualInteractionSourceRedirectionMode.CapableTouchpadOnly;
+
+            m_source.IsPositionXRailsEnabled = false;
+            m_source.PositionXChainingMode = InteractionChainingMode.Never;
+            m_source.PositionXSourceMode = InteractionSourceMode.EnabledWithoutInertia;
+
+            m_source.IsPositionYRailsEnabled = false;
+            m_source.PositionYChainingMode = InteractionChainingMode.Never;
+            m_source.PositionYSourceMode = InteractionSourceMode.Disabled;
+
+            m_tracker.InteractionSources.Add(m_source);
+
+            OffsetBind = compositor.CreateExpressionAnimation("-tracker.Position");
+            OffsetBind.SetReferenceParameter("tracker", m_tracker);
+
+            PanelVisual.StartAnimation("Offset", OffsetBind);
+        }
+
+        private void InitTrackerPositions()
+        {
+            if (m_tracker != null)
+            {
+                m_tracker.MaxPosition = new Vector3((float)((Count + 1) * this.ActualWidth), 0f, 0f);
+                m_tracker.MinPosition = new Vector3(-(float)(this.ActualWidth), 0f, 0f);
+            }
         }
 
         private void GotoIndex(int index, bool UseAnimation = true)
         {
             if (UseAnimation)
             {
-                OffsetAnimation.InsertKeyFrame(1f, new Vector3((float)(-this.ActualWidth * index), 0f, 0f));
-                PanelVisual.StartAnimation("Offset", OffsetAnimation);
+                OffsetAnimation.InsertKeyFrame(1f, new Vector3((float)(this.ActualWidth * index), 0f, 0f));
+                m_tracker.TryUpdatePositionWithAnimation(OffsetAnimation);
+                //PanelVisual.StartAnimation("Offset", OffsetAnimation);
             }
             else
             {
-                PanelVisual.Offset = new Vector3((float)(-this.ActualWidth * index), 0f, 0f);
+                m_tracker.TryUpdatePosition(new Vector3((float)(this.ActualWidth * index), 0f, 0f));
+                //PanelVisual.Offset = new Vector3((float)(-this.ActualWidth * index), 0f, 0f);
             }
         }
 
@@ -176,8 +209,6 @@ namespace ReaderView.Controls
 
             Count = ContentPanel.Children.Count;
         }
-
-
 
         public int Index
         {
@@ -213,7 +244,16 @@ namespace ReaderView.Controls
         }
 
         public static readonly DependencyProperty CountProperty =
-            DependencyProperty.Register("Count", typeof(int), typeof(ReaderView), new PropertyMetadata(0));
+            DependencyProperty.Register("Count", typeof(int), typeof(ReaderView), new PropertyMetadata(0, (s, a) =>
+            {
+                if (a.NewValue != a.OldValue)
+                {
+                    if (s is ReaderView sender)
+                    {
+                        sender.InitTrackerPositions();
+                    }
+                }
+            }));
 
 
 
@@ -256,6 +296,36 @@ namespace ReaderView.Controls
         }
 
 
+        private void _GestureRecognizer_ManipulationStarted(GestureRecognizer sender, ManipulationStartedEventArgs args)
+        {
+            startX = Index * this.ActualWidth;
+        }
+
+        private void _GestureRecognizer_ManipulationUpdated(GestureRecognizer sender, ManipulationUpdatedEventArgs args)
+        {
+            if (Math.Abs(args.Cumulative.Translation.X) < this.ActualWidth)
+            {
+                m_tracker.TryUpdatePosition(new Vector3((float)(startX - args.Cumulative.Translation.X), 0f, 0f));
+            }
+        }
+
+        private void _GestureRecognizer_ManipulationCompleted(GestureRecognizer sender, ManipulationCompletedEventArgs args)
+        {
+            IsCoreSelectedChanged = true;
+            if (args.Cumulative.Translation.X > 150 || args.Velocities.Linear.X > 0.5)
+            {
+                Index--;
+                if (Index < 0) Index = 0;
+            }
+            else if (args.Cumulative.Translation.X < -150 || args.Velocities.Linear.X < -0.5)
+            {
+                Index++;
+                if (Index > Count - 1) Index = Count - 1;
+            }
+            GotoIndex(Index);
+            IsCoreSelectedChanged = false;
+        }
+
         private void _PointerWheelChanged(object sender, PointerRoutedEventArgs e)
         {
             if (IndexFliter.IsEnable)
@@ -276,6 +346,61 @@ namespace ReaderView.Controls
             }
         }
 
+        private void _PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            if (m_source != null)
+            {
+                var pointer = e.GetCurrentPoint(this);
+                if (pointer.PointerDevice.PointerDeviceType == Windows.Devices.Input.PointerDeviceType.Pen || pointer.PointerDevice.PointerDeviceType == Windows.Devices.Input.PointerDeviceType.Touch)
+                {
+                    try
+                    {
+                        m_source.TryRedirectForManipulation(pointer);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine(ex);
+                    }
+                }
+                else
+                {
+                    this.CapturePointer(e.Pointer);
+                    _GestureRecognizer.ProcessDownEvent(pointer);
+                }
+            }
+        }
+
+        private void _PointerMoved(object sender, PointerRoutedEventArgs e)
+        {
+            var pointer = e.GetCurrentPoint(this);
+            if (pointer.PointerDevice.PointerDeviceType == Windows.Devices.Input.PointerDeviceType.Mouse)
+            {
+                var pointers = e.GetIntermediatePoints(this);
+                _GestureRecognizer.ProcessMoveEvents(pointers);
+            }
+        }
+
+
+        private void _PointerCanceled(object sender, PointerRoutedEventArgs e)
+        {
+            var pointer = e.GetCurrentPoint(this);
+            if (pointer.PointerDevice.PointerDeviceType == Windows.Devices.Input.PointerDeviceType.Mouse)
+            {
+                _GestureRecognizer.CompleteGesture();
+                this.ReleasePointerCapture(e.Pointer);
+            }
+        }
+
+        private void _PointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            var pointer = e.GetCurrentPoint(this);
+            if (pointer.PointerDevice.PointerDeviceType == Windows.Devices.Input.PointerDeviceType.Mouse)
+            {
+                _GestureRecognizer.ProcessUpEvent(pointer);
+                this.ReleasePointerCapture(e.Pointer);
+            }
+        }
+
         public event EventHandler PrevPageSelected;
         public event EventHandler NextPageSelected;
 
@@ -288,6 +413,68 @@ namespace ReaderView.Controls
         {
             NextPageSelected?.Invoke(this, EventArgs.Empty);
         }
+
+        #region InteractionTracker
+        public void CustomAnimationStateEntered(InteractionTracker sender, InteractionTrackerCustomAnimationStateEnteredArgs args)
+        {
+            IsAnimating = true;
+        }
+
+        public void IdleStateEntered(InteractionTracker sender, InteractionTrackerIdleStateEnteredArgs args)
+        {
+            if (IsAnimating)
+            {
+                IsAnimating = false;
+            }
+            else
+            {
+                IsCoreSelectedChanged = true;
+                var delta = sender.Position.X - Index * this.ActualWidth;
+                if (delta < -40)
+                {
+                    Index--;
+                    if (Index < 0)
+                    {
+                        Index = 0;
+                        OnPrevPageSelected();
+                    }
+                }
+                else if (delta > 40)
+                {
+                    Index++;
+                    if (Index > Count - 1)
+                    {
+                        Index = Count - 1;
+                        OnNextPageSelected();
+                    }
+                }
+                GotoIndex(Index);
+                IsCoreSelectedChanged = false;
+            }
+        }
+
+        public void InertiaStateEntered(InteractionTracker sender, InteractionTrackerInertiaStateEnteredArgs args)
+        {
+            IsAnimating = false;
+
+        }
+
+        public void InteractingStateEntered(InteractionTracker sender, InteractionTrackerInteractingStateEnteredArgs args)
+        {
+            IsAnimating = false;
+
+        }
+
+        public void RequestIgnored(InteractionTracker sender, InteractionTrackerRequestIgnoredArgs args)
+        {
+
+        }
+
+        public void ValuesChanged(InteractionTracker sender, InteractionTrackerValuesChangedArgs args)
+        {
+
+        }
+        #endregion InteractionTracker
     }
 
     public enum SetContentMode
