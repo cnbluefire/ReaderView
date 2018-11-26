@@ -3,68 +3,46 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Windows.UI.Xaml;
 
 namespace ReaderView.Common.Helpers
 {
     public class EventWaiter
     {
-        private DispatcherTimer _timer;
+        private DateTime _lastTime;
 
-        public EventWaiter(double seconds) : this(TimeSpan.FromSeconds(seconds))
+        public EventWaiter(double seconds)
         {
+            Interval = TimeSpan.FromSeconds(seconds);
         }
 
         public EventWaiter(TimeSpan interval)
         {
-            _timer = new DispatcherTimer();
-            _timer.Tick += _timer_Tick;
             Interval = interval;
         }
 
-        public EventWaiter() : this(0.1)
+        public EventWaiter()
         {
+            Interval = TimeSpan.FromSeconds(0.1d);
         }
 
-        public TimeSpan Interval
-        {
-            get => _timer.Interval;
-            set => _timer.Interval = value;
-        }
+        public TimeSpan Interval { get; set; }
 
-        public bool ResetWhenWaitCall { get; set; }
-
-        public void Wait()
+        public bool IsWaiting
         {
-            if (!_timer.IsEnabled)
+            get
             {
-                _timer.Start();
-            }
-            else
-            {
-                if (ResetWhenWaitCall)
+                if(DateTime.Now - _lastTime > Interval)
                 {
-                    _timer.Stop();
-                    _timer.Start();
+                    _lastTime = DateTime.Now;
+                    return true;
                 }
+                return false;
             }
         }
 
-
-        private void _timer_Tick(object sender, object e)
+        public void Reset()
         {
-            if (_timer.IsEnabled)
-            {
-                _timer.Stop();
-            }
-            OnArrived();
+            _lastTime = DateTime.Now;
         }
-
-        public event EventHandler Arrived;
-        protected void OnArrived()
-        {
-            Arrived?.Invoke(this, EventArgs.Empty);
-        }
-
     }
 }

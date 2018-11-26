@@ -22,6 +22,8 @@ namespace ReaderView.Controls
 {
     public sealed class ReaderView : Control, IInteractionTrackerOwner
     {
+        #region Ctor.
+
         public ReaderView()
         {
             this.DefaultStyleKey = typeof(ReaderView);
@@ -46,9 +48,9 @@ namespace ReaderView.Controls
             this.SizeChanged += ReaderView_SizeChanged;
 
 
-            IndexFliter = new EventTimeFliter();
-            CreateContentWaiter = new EventWaiter();
-            CreateContentWaiter.ResetWhenWaitCall = true;
+            IndexFliter = new EventWaiter();
+            CreateContentWaiter = new EventDelayer();
+            CreateContentWaiter.ResetWhenDelayed = true;
             CreateContentWaiter.Arrived += CreateContentWaiter_Arrived;
 
             this.Unloaded += (s, a) =>
@@ -62,14 +64,16 @@ namespace ReaderView.Controls
             };
 
         }
+        #endregion Ctor.
 
+        #region Field
 
         string content;
         double startX = 0;
         bool IsCoreSelectedChanged;
         bool IsAnimating;
-        EventTimeFliter IndexFliter;
-        EventWaiter CreateContentWaiter;
+        EventWaiter IndexFliter;
+        EventDelayer CreateContentWaiter;
 
         Compositor compositor;
         Vector3KeyFrameAnimation OffsetAnimation;
@@ -90,6 +94,10 @@ namespace ReaderView.Controls
         StackPanel ContentPanel;
         Border ContentBorder;
 
+        #endregion Field
+
+        #region Overrides
+
         protected override void OnApplyTemplate()
         {
             base.OnApplyTemplate();
@@ -100,6 +108,10 @@ namespace ReaderView.Controls
             SetupComposition();
             SetupTracker();
         }
+
+        #endregion Overrides
+
+        #region Public Methods
 
         public void SetContent(string Content, SetContentMode mode = SetContentMode.First)
         {
@@ -121,6 +133,10 @@ namespace ReaderView.Controls
             GotoIndex(Index, false);
             IsCoreSelectedChanged = false;
         }
+
+        #endregion Public Methods
+
+        #region Private Method
 
         private void SetupComposition()
         {
@@ -210,10 +226,26 @@ namespace ReaderView.Controls
             Count = ContentPanel.Children.Count;
         }
 
+        #endregion Private Method
+
+        #region Dependency Properties
+
         public int Index
         {
             get { return (int)GetValue(IndexProperty); }
             set { SetValue(IndexProperty, value); }
+        }
+
+        public int Count
+        {
+            get { return (int)GetValue(CountProperty); }
+            private set { SetValue(CountProperty, value); }
+        }
+
+        public double LineHeight
+        {
+            get { return (double)GetValue(LineHeightProperty); }
+            set { SetValue(LineHeightProperty, value); }
         }
 
         public static readonly DependencyProperty IndexProperty =
@@ -235,14 +267,6 @@ namespace ReaderView.Controls
                 }
             }));
 
-
-
-        public int Count
-        {
-            get { return (int)GetValue(CountProperty); }
-            private set { SetValue(CountProperty, value); }
-        }
-
         public static readonly DependencyProperty CountProperty =
             DependencyProperty.Register("Count", typeof(int), typeof(ReaderView), new PropertyMetadata(0, (s, a) =>
             {
@@ -255,14 +279,6 @@ namespace ReaderView.Controls
                 }
             }));
 
-
-
-        public double LineHeight
-        {
-            get { return (double)GetValue(LineHeightProperty); }
-            set { SetValue(LineHeightProperty, value); }
-        }
-
         public static readonly DependencyProperty LineHeightProperty =
             DependencyProperty.Register("LineHeight", typeof(double), typeof(ReaderView), new PropertyMetadata(10d, (s, a) =>
             {
@@ -270,18 +286,32 @@ namespace ReaderView.Controls
                 {
                     if (s is ReaderView sender)
                     {
-                        sender.CreateContentWaiter.Wait();
+                        sender.CreateContentWaiter.Delay();
                     }
                 }
             }));
 
+        #endregion Dependency Properties
 
+        #region Events
+
+        public event EventHandler PrevPageSelected;
+        public event EventHandler NextPageSelected;
+
+        private void OnPrevPageSelected()
+        {
+            PrevPageSelected?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void OnNextPageSelected()
+        {
+            NextPageSelected?.Invoke(this, EventArgs.Empty);
+        }
 
         private void ReaderView_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            CreateContentWaiter.Wait();
+            CreateContentWaiter.Delay();
         }
-
 
         private void CreateContentWaiter_Arrived(object sender, EventArgs e)
         {
@@ -295,6 +325,7 @@ namespace ReaderView.Controls
             IsCoreSelectedChanged = false;
         }
 
+        #region Manipulation Events
 
         private void _GestureRecognizer_ManipulationStarted(GestureRecognizer sender, ManipulationStartedEventArgs args)
         {
@@ -326,9 +357,13 @@ namespace ReaderView.Controls
             IsCoreSelectedChanged = false;
         }
 
+        #endregion Manipulation Events
+
+        #region Pointer Events
+
         private void _PointerWheelChanged(object sender, PointerRoutedEventArgs e)
         {
-            if (IndexFliter.IsEnable)
+            if (IndexFliter.IsWaiting)
             {
                 IsCoreSelectedChanged = true;
                 if (e.GetCurrentPoint(this).Properties.MouseWheelDelta > 0)
@@ -401,20 +436,9 @@ namespace ReaderView.Controls
             }
         }
 
-        public event EventHandler PrevPageSelected;
-        public event EventHandler NextPageSelected;
+        #endregion Pointer Events
 
-        private void OnPrevPageSelected()
-        {
-            PrevPageSelected?.Invoke(this, EventArgs.Empty);
-        }
-
-        private void OnNextPageSelected()
-        {
-            NextPageSelected?.Invoke(this, EventArgs.Empty);
-        }
-
-        #region InteractionTracker
+        #region Interaction Tracker Events
         public void CustomAnimationStateEntered(InteractionTracker sender, InteractionTrackerCustomAnimationStateEnteredArgs args)
         {
             IsAnimating = true;
@@ -474,7 +498,8 @@ namespace ReaderView.Controls
         {
 
         }
-        #endregion InteractionTracker
+        #endregion Interaction Tracker Events
+        #endregion Events
     }
 
     public enum SetContentMode

@@ -121,8 +121,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Class1.cs" />
-    <Compile Include="Common\Helpers\EventTimeFliter.cs" />
     <Compile Include="Common\Helpers\EventWaiter.cs" />
+    <Compile Include="Common\Helpers\EventDelayer.cs" />
     <Compile Include="Controls\ReaderPage.xaml.cs">
       <DependentUpon>ReaderPage.xaml</DependentUpon>
     </Compile>
