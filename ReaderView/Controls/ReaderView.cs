@@ -186,6 +186,7 @@ namespace ReaderView.Controls
 
         private void GotoIndex(int index, bool UseAnimation = true)
         {
+            if (index < 0) return;
             if (UseAnimation)
             {
                 OffsetAnimation.InsertKeyFrame(1f, new Vector3((float)(this.ActualWidth * index), 0f, 0f));
@@ -248,8 +249,20 @@ namespace ReaderView.Controls
             set { SetValue(LineHeightProperty, value); }
         }
 
+        public object Header
+        {
+            get { return (object)GetValue(HeaderProperty); }
+            set { SetValue(HeaderProperty, value); }
+        }
+
+        public object Footer
+        {
+            get { return (object)GetValue(FooterProperty); }
+            set { SetValue(FooterProperty, value); }
+        }
+
         public static readonly DependencyProperty IndexProperty =
-            DependencyProperty.Register("Index", typeof(int), typeof(ReaderView), new PropertyMetadata(0, (s, a) =>
+            DependencyProperty.Register("Index", typeof(int), typeof(ReaderView), new PropertyMetadata(-1, (s, a) =>
             {
                 if (a.NewValue != a.OldValue)
                 {
@@ -260,6 +273,8 @@ namespace ReaderView.Controls
                         {
                             sender.GotoIndex(index);
                         }
+
+                        sender.OnSelectionChanged();
 
                         if (index < 0) sender.OnPrevPageSelected();
                         else if (index > sender.Count - 1) sender.OnNextPageSelected();
@@ -291,12 +306,21 @@ namespace ReaderView.Controls
                 }
             }));
 
+        public static readonly DependencyProperty HeaderProperty =
+            DependencyProperty.Register("Header", typeof(object), typeof(ReaderView), new PropertyMetadata(null));
+
+        public static readonly DependencyProperty FooterProperty =
+            DependencyProperty.Register("Footer", typeof(object), typeof(ReaderView), new PropertyMetadata(null));
+
+
+
         #endregion Dependency Properties
 
         #region Events
 
         public event EventHandler PrevPageSelected;
         public event EventHandler NextPageSelected;
+        public event EventHandler<int> SelectionChanged;
 
         private void OnPrevPageSelected()
         {
@@ -306,6 +330,11 @@ namespace ReaderView.Controls
         private void OnNextPageSelected()
         {
             NextPageSelected?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void OnSelectionChanged()
+        {
+            SelectionChanged?.Invoke(this, Index);
         }
 
         private void ReaderView_SizeChanged(object sender, SizeChangedEventArgs e)

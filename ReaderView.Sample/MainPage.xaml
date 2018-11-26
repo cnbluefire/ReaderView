@@ -10,6 +10,18 @@
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}" Loaded="Page_Loaded">
 
     <Grid>
-        <control:ReaderView x:Name="readerView" PrevPageSelected="ReaderView_PrevPageSelected" NextPageSelected="ReaderView_NextPageSelected" />
+        <control:ReaderView x:Name="readerView" PrevPageSelected="ReaderView_PrevPageSelected" NextPageSelected="ReaderView_NextPageSelected" SelectionChanged="ReaderView_SelectionChanged" >
+            <control:ReaderView.Header>
+                <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                    <TextBlock x:Name="ReaderViewLeftHeader" HorizontalAlignment="Left" Margin="10,5" />
+                    <TextBlock x:Name="ReaderViewRightHeader" HorizontalAlignment="Right" Margin="10,5" />
+                </Grid>
+            </control:ReaderView.Header>
+            <control:ReaderView.Footer>
+                <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                    <TextBlock x:Name="ReaderViewFooter" HorizontalAlignment="Right" Margin="10,5" />
+                </Grid>
+            </control:ReaderView.Footer>
+        </control:ReaderView>
     </Grid>
 </Page>

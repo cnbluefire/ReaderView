@@ -21,11 +21,11 @@
                             <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <ContentPresenter x:Name="HeaderContent" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+                        <ContentPresenter x:Name="HeaderContent" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Content="{TemplateBinding Header}" />
                         <Border x:Name="ContentBorder" Grid.Row="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" >
                             <StackPanel x:Name="ContentPanel" Orientation="Horizontal" />
                         </Border>
-                        <ContentPresenter x:Name="FooterContent" Grid.Row="2" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+                        <ContentPresenter x:Name="FooterContent" Grid.Row="2" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Content="{TemplateBinding Footer}" />
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>

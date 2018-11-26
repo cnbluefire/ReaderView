@@ -43,6 +43,8 @@ namespace ReaderView.Sample
             }
 
             readerView.SetContent(content);
+            ReaderViewLeftHeader.Text = "逆天邪神";
+            ReaderViewRightHeader.Text = "第一章";
         }
 
         private void ReaderView_PrevPageSelected(object sender, EventArgs e)
@@ -51,6 +53,7 @@ namespace ReaderView.Sample
 
             readerView.SetContent(content,SetContentMode.Last);
             now = 0;
+            ReaderViewRightHeader.Text = "第一章";
         }
 
         private void ReaderView_NextPageSelected(object sender, EventArgs e)
@@ -59,6 +62,12 @@ namespace ReaderView.Sample
 
             readerView.SetContent(content, SetContentMode.First);
             now = 1;
+            ReaderViewRightHeader.Text = "第二章";
+        }
+
+        private void ReaderView_SelectionChanged(object sender, int e)
+        {
+            ReaderViewFooter.Text = (readerView.Index + 1) + " / " + readerView.Count;
         }
     }
 }
